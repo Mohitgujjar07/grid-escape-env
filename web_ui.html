@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid Escape — OpenEnv</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+header { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 12px 20px; display: flex; align-items: center; gap: 10px; }
+header h1 { font-size: 15px; font-weight: 600; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+.b-green { background: #e8f5e9; color: #2e7d32; }
+.b-blue  { background: #e3f2fd; color: #1565c0; }
+.b-red   { background: #fce4ec; color: #b71c1c; }
+.b-gray  { background: #f0f0f0; color: #555; }
+.layout { display: grid; grid-template-columns: auto 1fr; gap: 16px; padding: 16px 20px; max-width: 900px; margin: 0 auto; }
+.card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 16px; }
+.card h2 { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 12px; }
+
+/* grid */
+#grid { display: grid; grid-template-columns: repeat(6, 52px); gap: 3px; }
+.cell { width: 52px; height: 52px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; transition: background .15s; }
+.cell-empty { background: #f9f9f9; border: 1px solid #eee; }
+.cell-wall  { background: #37474f; color: #fff; font-size: 13px; }
+.cell-trap  { background: #fce4ec; border: 1px solid #f48fb1; color: #b71c1c; }
+.cell-goal  { background: #e8f5e9; border: 1px solid #a5d6a7; color: #2e7d32; }
+.cell-agent { background: #e3f2fd; border: 2px solid #1565c0; color: #1565c0; }
+.cell-agent-on-trap { background: #fce4ec; border: 2px solid #b71c1c; color: #b71c1c; }
+.cell-agent-on-goal { background: #e8f5e9; border: 2px solid #2e7d32; color: #2e7d32; }
+
+/* dpad */
+.dpad { display: grid; grid-template-columns: repeat(3, 44px); gap: 4px; margin-top: 12px; }
+.dpad button { width: 44px; height: 44px; border-radius: 7px; background: #fff; border: 1px solid #ddd; font-size: 16px; cursor: pointer; transition: all .1s; }
+.dpad button:hover { background: #f0f0f0; }
+.dpad button:active { transform: scale(.93); }
+.dpad .empty { background: none; border: none; cursor: default; }
+
+/* controls */
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+button.btn { padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1.5px solid; transition: all .12s; }
+.btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.btn-primary:hover { opacity: .85; }
+.btn-outline { background: #fff; color: #333; border-color: #ccc; }
+.btn-outline:hover { background: #f5f5f5; }
+.btn-ai { background: #e3f2fd; color: #1565c0; border-color: #90caf9; }
+.btn-ai:hover { background: #bbdefb; }
+.btn-stop { background: #fce4ec; color: #b71c1c; border-color: #f48fb1; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.stat { background: #fafafa; border: 1px solid #eee; border-radius: 7px; padding: 10px; }
+.stat-label { font-size: 11px; color: #888; margin-bottom: 3px; }
+.stat-val { font-size: 20px; font-weight: 600; }
+
+/* log */
+.log { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.log-item { font-size: 12px; padding: 8px 10px; border-radius: 6px; line-height: 1.4; }
+.log-ok   { background: #f0f4ff; border: 1px solid #c5cae9; color: #283593; }
+.log-win  { background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20; }
+.log-lose { background: #fce4ec; border: 1px solid #f48fb1; color: #880e4f; }
+.log-info { background: #f5f5f5; border: 1px solid #e0e0e0; color: #555; }
+
+/* legend */
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.leg { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #555; }
+.leg-dot { width: 16px; height: 16px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+
+.progress { height: 4px; background: #eee; border-radius: 2px; margin-bottom: 14px; }
+.progress-fill { height: 100%; background: #1a1a1a; border-radius: 2px; transition: width .3s; }
+.status-msg { font-size: 13px; color: #555; min-height: 20px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Grid Escape</h1>
+  <span class="badge b-gray" id="conn-badge">connecting...</span>
+  <span class="badge b-blue" style="margin-left:auto;">OpenEnv</span>
+</header>
+
+<div class="layout">
+  <div>
+    <div class="card" style="display:inline-block;">
+      <h2>Game board</h2>
+      <div id="grid"></div>
+      <div class="dpad">
+        <div class="empty"></div>
+        <button onclick="move('up')">↑</button>
+        <div class="empty"></div>
+        <button onclick="move('left')">←</button>
+        <div class="empty"></div>
+        <button onclick="move('right')">→</button>
+        <div class="empty"></div>
+        <button onclick="move('down')">↓</button>
+        <div class="empty"></div>
+      </div>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:#e3f2fd;border:1px solid #90caf9;color:#1565c0;">A</div> Agent</div>
+        <div class="leg"><div class="leg-dot" style="background:#e8f5e9;border:1px solid #a5d6a7;color:#2e7d32;">G</div> Goal</div>
+        <div class="leg"><div class="leg-dot" style="background:#fce4ec;border:1px solid #f48fb1;color:#b71c1c;">T</div> Trap</div>
+        <div class="leg"><div class="leg-dot" style="background:#37474f;color:#fff;">W</div> Wall</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px;">
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="controls">
+        <button class="btn btn-primary" onclick="resetGame()">▶ New game</button>
+        <button class="btn btn-ai" id="ai-btn" onclick="toggleAI()">🤖 Run AI agent</button>
+        <select id="level-sel" style="padding:8px 10px;border-radius:7px;border:1.5px solid #ccc;font-size:13px;background:#fff;">
+          <option value="0">Level 1</option>
+          <option value="1">Level 2</option>
+          <option value="2">Level 3</option>
+        </select>
+      </div>
+      <div class="progress"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+      <div class="status-msg" id="status-msg">Press New game to start</div>
+    </div>
+
+    <div class="card">
+      <h2>Stats</h2>
+      <div class="stats">
+        <div class="stat"><div class="stat-label">Score</div><div class="stat-val" id="score">—</div></div>
+        <div class="stat"><div class="stat-label">Steps</div><div class="stat-val" id="steps">—</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;">
+      <h2>Action log</h2>
+      <div class="log" id="log"><div class="log-item log-info">Waiting for game to start...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let ws, gameActive = false, aiRunning = false, aiTimer = null;
+let currentObs = null, currentState = null;
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => setBadge('connected', '#2e7d32', '#e8f5e9');
+  ws.onclose = () => { setBadge('disconnected', '#b71c1c', '#fce4ec'); setTimeout(connect, 2000); };
+  ws.onmessage = e => handleMsg(JSON.parse(e.data));
+}
+
+function setBadge(text, color, bg) {
+  const b = document.getElementById('conn-badge');
+  b.textContent = text; b.style.color = color; b.style.background = bg;
+}
+
+function handleMsg(data) {
+  if (data.state) updateStats(data.state);
+  if (data.observation) { currentObs = data.observation; renderGrid(data.observation); }
+  if (data.reward !== undefined) logStep(data);
+  if (data.done || (data.state && data.state.done)) endGame(data.state);
+}
+
+function renderGrid(obs) {
+  const g = document.getElementById('grid');
+  g.innerHTML = '';
+  obs.grid.forEach((row, r) => {
+    row.forEach((cell, c) => {
+      const div = document.createElement('div');
+      const isAgent = obs.agent_pos[0] === r && obs.agent_pos[1] === c;
+      if (cell === 'W') div.className = 'cell cell-wall', div.textContent = '▪';
+      else if (cell === 'T') div.className = 'cell cell-trap', div.textContent = 'T';
+      else if (cell === 'G') div.className = 'cell cell-goal', div.textContent = 'G';
+      else if (cell === 'A') div.className = 'cell cell-agent', div.textContent = 'A';
+      else div.className = 'cell cell-empty';
+      g.appendChild(div);
+    });
+  });
+  if (obs.message) document.getElementById('status-msg').textContent = obs.message;
+}
+
+function updateStats(state) {
+  document.getElementById('score').textContent = state.score.toFixed(1);
+  document.getElementById('steps').textContent = state.max_steps ? `${state.step}/${state.max_steps}` : state.step;
+  if (state.max_steps) document.getElementById('prog').style.width = `${Math.min(100, (state.step/state.max_steps)*100)}%`;
+  currentState = state;
+}
+
+function logStep(data) {
+  const log = document.getElementById('log');
+  const item = document.createElement('div');
+  const obs = data.observation;
+  const won = data.state && data.state.won;
+  const lost = data.done && !won;
+  item.className = `log-item ${data.reward >= 10 ? 'log-win' : data.reward < 0 ? 'log-lose' : 'log-ok'}`;
+  item.innerHTML = `<strong>Step ${data.state ? data.state.step : '?'}</strong> — ${obs ? obs.message : ''} <em style="float:right">${data.reward > 0 ? '+' : ''}${data.reward.toFixed(2)}</em>`;
+  log.prepend(item);
+}
+
+function endGame(state) {
+  gameActive = false;
+  stopAI();
+  if (!state) return;
+  const log = document.getElementById('log');
+  const item = document.createElement('div');
+  item.className = `log-item ${state.won ? 'log-win' : 'log-lose'}`;
+  item.innerHTML = state.won
+    ? `<strong>WIN! Final score: ${state.score.toFixed(1)}</strong>`
+    : `<strong>GAME OVER. Score: ${state.score.toFixed(1)}</strong>`;
+  log.prepend(item);
+  document.getElementById('prog').style.width = '100%';
+}
+
+function resetGame() {
+  stopAI();
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('prog').style.width = '0%';
+  const level = parseInt(document.getElementById('level-sel').value);
+  ws.send(JSON.stringify({ method: 'reset', level }));
+  gameActive = true;
+}
+
+function move(dir) {
+  if (!gameActive || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ method: 'step', action: { move: dir } }));
+}
+
+document.addEventListener('keydown', e => {
+  const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', w:'up', s:'down', a:'left', d:'right' };
+  if (map[e.key]) { e.preventDefault(); move(map[e.key]); }
+});
+
+// ─── AI Agent (BFS pathfinding) ───────────────────────────────────────────
+function bfsNextMove(obs) {
+  if (!obs) return null;
+  const grid = obs.grid;
+  const start = obs.agent_pos;
+  const goal = obs.goal_pos;
+  const R = grid.length, C = grid[0].length;
+  const dirs = [['up',-1,0],['down',1,0],['left',0,-1],['right',0,1]];
+  const visited = Array.from({length:R}, () => Array(C).fill(false));
+  const queue = [[start[0], start[1], []]];
+  visited[start[0]][start[1]] = true;
+
+  while (queue.length) {
+    const [r, c, path] = queue.shift();
+    for (const [dir, dr, dc] of dirs) {
+      const nr = r+dr, nc = c+dc;
+      if (nr<0||nr>=R||nc<0||nc>=C) continue;
+      if (visited[nr][nc]) continue;
+      const cell = grid[nr][nc];
+      if (cell === 'W' || cell === 'T') continue;
+      visited[nr][nc] = true;
+      const newPath = [...path, dir];
+      if (nr === goal[0] && nc === goal[1]) return newPath[0] || null;
+      queue.push([nr, nc, newPath]);
+    }
+  }
+  // fallback: random non-wall move
+  const moves = dirs.filter(([,dr,dc]) => {
+    const nr=start[0]+dr, nc=start[1]+dc;
+    return nr>=0&&nr<R&&nc>=0&&nc<C && grid[nr][nc]!=='W' && grid[nr][nc]!=='T';
+  });
+  return moves.length ? moves[Math.floor(Math.random()*moves.length)][0] : dirs[Math.floor(Math.random()*4)][0];
+}
+
+function toggleAI() {
+  if (aiRunning) { stopAI(); return; }
+  if (!gameActive) resetGame();
+  setTimeout(startAI, 400);
+}
+
+function startAI() {
+  aiRunning = true;
+  document.getElementById('ai-btn').textContent = '⏹ Stop AI';
+  document.getElementById('ai-btn').className = 'btn btn-stop';
+  runAIStep();
+}
+
+function runAIStep() {
+  if (!aiRunning || !gameActive) return;
+  const nextMove = bfsNextMove(currentObs);
+  if (nextMove) {
+    ws.send(JSON.stringify({ method: 'step', action: { move: nextMove } }));
+  }
+  aiTimer = setTimeout(runAIStep, 500);
+}
+
+function stopAI() {
+  aiRunning = false;
+  clearTimeout(aiTimer);
+  document.getElementById('ai-btn').textContent = '🤖 Run AI agent';
+  document.getElementById('ai-btn').className = 'btn btn-ai';
+}
+
+connect();
+</script>
+</body>
+</html>

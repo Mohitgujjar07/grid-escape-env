@@ -1,0 +1,32 @@
+name: grid-escape-env
+version: "1.0.0"
+description: >
+  A 6x6 grid navigation game for RL agents. The agent must reach the
+  goal tile (G) while avoiding traps (T) and walls (W) in the fewest steps.
+
+action_space:
+  type: discrete
+  choices: [up, down, left, right]
+
+observation_space:
+  fields:
+    - grid: 6x6 array of strings
+    - agent_pos: [row, col]
+    - goal_pos: [row, col]
+    - step: int
+    - message: string
+
+reward:
+  reach_goal: +10.0 (+ speed bonus)
+  step_trap: -1.0
+  wall_bump: -0.1
+  each_step: -0.05
+
+episode_length: 30
+levels: 3
+
+tags:
+  - navigation
+  - grid-world
+  - pathfinding
+  - reinforcement-learning
